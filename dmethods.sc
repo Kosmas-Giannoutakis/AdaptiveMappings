@@ -243,4 +243,37 @@
 
 	}
 
+	dOnsets {
+
+		var in=this.specify;
+		var numChannels=in.size;
+		var amps=numChannels.collect{arg i; Amplitude.kr(in[i])};
+		var chain=in.collect{arg item; FFT(LocalBuf(1024), item)};
+		var onsets=numChannels.collect{arg i; Onsets.kr(chain[i], amps[i])};
+		^onsets;
+
+	}
+
+	dOnsetsJA {
+
+		var in=this.specify;
+		var numChannels=in.size;
+		var amps=numChannels.collect{arg i; Amplitude.ar(in[i])};
+		var chain=in.collect{arg item; FFT(LocalBuf(2048), item)};
+		var onsets=numChannels.collect{arg i; PV_JensenAndersen.ar(chain[i], threshold: amps[i])};
+		^onsets;
+
+	}
+
+	dOnsetsHF {
+
+		var in=this.specify;
+		var numChannels=in.size;
+		var amps=numChannels.collect{arg i; Amplitude.ar(in[i])};
+		var chain=in.collect{arg item; FFT(LocalBuf(2048), item)};
+		var onsets=numChannels.collect{arg i; PV_HainsworthFoote.ar(chain[i], threshold: amps[i]-0.001)};
+		^onsets;
+
+	}
+
 }
