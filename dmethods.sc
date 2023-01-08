@@ -1,6 +1,6 @@
 + Object {
 
-	specify {
+	audify {
 		^if(
 			this.isArray,
 			{
@@ -25,7 +25,7 @@
 	dPitch {
 		arg timeWindow=5, lagTime=0.1;
 
-		var in=this.specify;
+		var in=this.audify;
 		var numChannels=in.size;
 		var sampNum=(timeWindow/ControlDur.ir).round; //calculate number of sumples
 		var pitch=numChannels.collect{arg i; A2K.kr(ZeroCrossing.ar(in[i])).cpsmidi}; //track raw pitch, convert to midi
@@ -36,9 +36,9 @@
 		var writeBuf=numChannels.collect{arg i; BufWr.kr(pitch[i], ringBuf[i], phasor)};
 
 		// extract min values from the ring buffers, substract infinitesimal value for preventing nan in stable signals
-		var min=numChannels.collect{arg i; (BufMin.kr(ringBuf[i])[0]-1e-5).clip(0,127).lag};
+		var min=numChannels.collect{arg i; (BufMin.kr(ringBuf[i])[0].clip(0,127)-1e-5).lag};
 		// extract max values from the ring buffers, add infinitesimal value for preventing nan in stable signals
-		var max=numChannels.collect{arg i; (BufMax.kr(ringBuf[i])[0]+1e-5).clip(0,127).lag};
+		var max=numChannels.collect{arg i; (BufMax.kr(ringBuf[i])[0].clip(0,127)+1e-5).lag};
 
 		// unamp pitch to the range 0-1 for each channel
 		var unmapedPitch=numChannels.collect{arg i; [min[i], max[i]].asSpec.unmap(pitch[i])};
@@ -47,10 +47,19 @@
 
 	}
 
+	sPitch {
+
+		arg lagTime=0.1, lowFreq=40, highFreq=20000, warp=\exp;
+		var in=this.audify;
+		var unmaping=[lowFreq,highFreq,warp].asSpec.unmap(ZeroCrossing.ar(in));
+		^unmaping.lag(lagTime);
+
+	}
+
 	dAmp {
 		arg timeWindow=5, lagTime=0.1;
 
-		var in=this.specify;
+		var in=this.audify;
 		var numChannels=in.size;
 		var sampNum=(timeWindow/ControlDur.ir).round;
 		var amps=numChannels.collect{arg i; Amplitude.kr(in[i]).ampdb};
@@ -59,8 +68,8 @@
 
 		var writeBuf=numChannels.collect{arg i; BufWr.kr(amps[i], ringBuf[i], phasor)};
 
-		var min=numChannels.collect{arg i; (BufMin.kr(ringBuf[i])[0]-1e-5).clip(-100,0).lag};
-		var max=numChannels.collect{arg i; (BufMax.kr(ringBuf[i])[0]+1e-5).clip(-100,0).lag};
+		var min=numChannels.collect{arg i; (BufMin.kr(ringBuf[i])[0].clip(-100,0)-1e-5).lag};
+		var max=numChannels.collect{arg i; (BufMax.kr(ringBuf[i])[0].clip(-100,0)+1e-5).lag};
 
 		var unmapedAmp=numChannels.collect{arg i; [min[i], max[i]].asSpec.unmap(amps[i])};
 
@@ -68,10 +77,19 @@
 
 	}
 
+	sAmp {
+
+		arg lagTime=0.1, lowAmp= -60, highAmp=0, warp=\lin;
+		var in=this.audify;
+		var unmaping=[lowAmp,highAmp,warp].asSpec.unmap(Amplitude.ar(in).ampdb);
+		^unmaping.lag(lagTime);
+
+	}
+
 	dRms {
 		arg timeWindow=5, lagTime=0.1;
 
-		var in=this.specify;
+		var in=this.audify;
 		var numChannels=in.size;
 		var sampNum=(timeWindow/ControlDur.ir).round;
 		var rms=numChannels.collect{arg i; (RunningSum.kr(in[i].squared)/40).sqrt.ampdb};
@@ -80,8 +98,8 @@
 
 		var writeBuf=numChannels.collect{arg i; BufWr.kr(rms[i], ringBuf[i], phasor)};
 
-		var min=numChannels.collect{arg i; (BufMin.kr(ringBuf[i])[0]-1e-5).clip(-100,0).lag};
-		var max=numChannels.collect{arg i; (BufMax.kr(ringBuf[i])[0]+1e-5).clip(-100,0).lag};
+		var min=numChannels.collect{arg i; (BufMin.kr(ringBuf[i])[0].clip(-100,0)-1e-5).lag};
+		var max=numChannels.collect{arg i; (BufMax.kr(ringBuf[i])[0].clip(-100,0)+1e-5).lag};
 
 		var unmapedRms=numChannels.collect{arg i; [min[i], max[i]].asSpec.unmap(rms[i])};
 
@@ -89,10 +107,19 @@
 
 	}
 
+	sRms {
+
+		arg lagTime=0.1, lowRms= -60, highRms=0, warp=\lin;
+		var in=this.audify;
+		var unmaping=[lowRms,highRms,warp].asSpec.unmap(RunningSum.rms(in).ampdb);
+		^unmaping.lag(lagTime);
+
+	}
+
 	dLoud {
 		arg timeWindow=5, lagTime=0.1;
 
-		var in=this.specify;
+		var in=this.audify;
 		var numChannels=in.size;
 		var sampNum=(timeWindow/ControlDur.ir).round;
 		var chain=in.collect{arg item; FFT(LocalBuf(1024), item)};
@@ -102,8 +129,8 @@
 
 		var writeBuf=numChannels.collect{arg i; BufWr.kr(loudness[i], ringBuf[i], phasor)};
 
-		var min=numChannels.collect{arg i; (BufMin.kr(ringBuf[i])[0]-1e-5).clip(0,64).lag};
-		var max=numChannels.collect{arg i; (BufMax.kr(ringBuf[i])[0]+1e-5).clip(0,64).lag};
+		var min=numChannels.collect{arg i; (BufMin.kr(ringBuf[i])[0].clip(0,64)-1e-5).lag};
+		var max=numChannels.collect{arg i; (BufMax.kr(ringBuf[i])[0].clip(0,64)+1e-5).lag};
 
 		var unmapedLoudness=numChannels.collect{arg i; [min[i], max[i]].asSpec.unmap(loudness[i])};
 
@@ -114,7 +141,7 @@
 	dFlat {
 		arg timeWindow=5, lagTime=0.1;
 
-		var in=this.specify;
+		var in=this.audify;
 		var numChannels=in.size;
 		var sampNum=(timeWindow/ControlDur.ir).round;
 		var chain=in.collect{arg item; FFT(LocalBuf(1024), item)};
@@ -124,8 +151,8 @@
 
 		var writeBuf=numChannels.collect{arg i; BufWr.kr(flat[i], ringBuf[i], phasor)};
 
-		var min=numChannels.collect{arg i; (BufMin.kr(ringBuf[i])[0]-1e-5).clip(0,0.8).lag};
-		var max=numChannels.collect{arg i; (BufMax.kr(ringBuf[i])[0]+1e-5).clip(0,0.8).lag};
+		var min=numChannels.collect{arg i; (BufMin.kr(ringBuf[i])[0].clip(0,0.8)-1e-5).lag};
+		var max=numChannels.collect{arg i; (BufMax.kr(ringBuf[i])[0].clip(0,0.8)+1e-5).lag};
 
 		var unmapedFlatness=numChannels.collect{arg i; [min[i], max[i]].asSpec.unmap(flat[i])};
 
@@ -133,10 +160,22 @@
 
 	}
 
+	sFlat {
+
+		arg lagTime=0.1, lowFlat=0, highFlat=0.8, warp=\lin;
+		var in=this.audify;
+		var numChannels=in.size;
+		var chain=in.collect{arg item; FFT(LocalBuf(1024), item)};
+		var flat=numChannels.collect{arg i; SpecFlatness.kr(chain[i])};
+		var unmaping=[lowFlat,highFlat,warp].asSpec.unmap(flat);
+		^unmaping.lag(lagTime);
+
+	}
+
 	dPcile {
 		arg timeWindow=5, lagTime=0.1;
 
-		var in=this.specify;
+		var in=this.audify;
 		var numChannels=in.size;
 		var sampNum=(timeWindow/ControlDur.ir).round;
 		var chain=in.collect{arg item; FFT(LocalBuf(1024), item)};
@@ -146,8 +185,8 @@
 
 		var writeBuf=numChannels.collect{arg i; BufWr.kr(pcile[i], ringBuf[i], phasor)};
 
-		var min=numChannels.collect{arg i; (BufMin.kr(ringBuf[i])[0]-1e-5).clip(0,15000).lag};
-		var max=numChannels.collect{arg i; (BufMax.kr(ringBuf[i])[0]+1e-5).clip(0,15000).lag};
+		var min=numChannels.collect{arg i; (BufMin.kr(ringBuf[i])[0].clip(0,15000)-1e-5).lag};
+		var max=numChannels.collect{arg i; (BufMax.kr(ringBuf[i])[0].clip(0,15000)+1e-5).lag};
 
 		var unmapedPcile=numChannels.collect{arg i; [min[i], max[i]].asSpec.unmap(pcile[i])};
 
@@ -155,10 +194,22 @@
 
 	}
 
+	sPcile {
+
+		arg lagTime=0.1, lowPcile=40, highPcile=20000, warp=\exp;
+		var in=this.audify;
+		var numChannels=in.size;
+		var chain=in.collect{arg item; FFT(LocalBuf(1024), item)};
+		var flat=numChannels.collect{arg i; SpecPcile.kr(chain[i])};
+		var unmaping=[lowPcile,highPcile,warp].asSpec.unmap(flat);
+		^unmaping.lag(lagTime);
+
+	}
+
 	dCentroid {
 		arg timeWindow=5, lagTime=0.1;
 
-		var in=this.specify;
+		var in=this.audify;
 		var numChannels=in.size;
 		var sampNum=(timeWindow/ControlDur.ir).round;
 		var chain=in.collect{arg item; FFT(LocalBuf(1024), item)};
@@ -168,8 +219,8 @@
 
 		var writeBuf=numChannels.collect{arg i; BufWr.kr(centroid[i], ringBuf[i], phasor)};
 
-		var min=numChannels.collect{arg i; (BufMin.kr(ringBuf[i])[0]-1e-5).clip(0,15000).lag};
-		var max=numChannels.collect{arg i; (BufMax.kr(ringBuf[i])[0]+1e-5).clip(0,15000).lag};
+		var min=numChannels.collect{arg i; (BufMin.kr(ringBuf[i])[0].clip(0,15000)-1e-5).lag};
+		var max=numChannels.collect{arg i; (BufMax.kr(ringBuf[i])[0].clip(0,15000)+1e-5).lag};
 
 		var unmapedCentroid=numChannels.collect{arg i; [min[i], max[i]].asSpec.unmap(centroid[i])};
 
@@ -177,10 +228,22 @@
 
 	}
 
+	sCentroid {
+
+		arg lagTime=0.1, lowCentroid=40, highCentroid=20000, warp=\exp;
+		var in=this.audify;
+		var numChannels=in.size;
+		var chain=in.collect{arg item; FFT(LocalBuf(1024), item)};
+		var flat=numChannels.collect{arg i; SpecCentroid.kr(chain[i])};
+		var unmaping=[lowCentroid,highCentroid,warp].asSpec.unmap(flat);
+		^unmaping.lag(lagTime);
+
+	}
+
 	dSpread {
 		arg timeWindow=5, lagTime=0.1;
 
-		var in=this.specify;
+		var in=this.audify;
 		var numChannels=in.size;
 		var sampNum=(timeWindow/ControlDur.ir).round;
 		var chain=in.collect{arg item; FFT(LocalBuf(1024), item)};
@@ -190,8 +253,8 @@
 
 		var writeBuf=numChannels.collect{arg i; BufWr.kr(spread[i], ringBuf[i], phasor)};
 
-		var min=numChannels.collect{arg i; (BufMin.kr(ringBuf[i])[0]-1e-5).clip(1e+4,7e+7).lag};
-		var max=numChannels.collect{arg i; (BufMax.kr(ringBuf[i])[0]+1e-5).clip(1e+4,7e+7).lag};
+		var min=numChannels.collect{arg i; (BufMin.kr(ringBuf[i])[0].clip(1e+4,7e+7)-1e-5).lag};
+		var max=numChannels.collect{arg i; (BufMax.kr(ringBuf[i])[0].clip(1e+4,7e+7)+1e-5).lag};
 
 		var unmapedSpread=numChannels.collect{arg i; [min[i], max[i]].asSpec.unmap(spread[i])};
 
@@ -199,10 +262,22 @@
 
 	}
 
+	sSpread {
+
+		arg lagTime=0.1, lowSpread=40, highSpread=20000, warp=\exp;
+		var in=this.audify;
+		var numChannels=in.size;
+		var chain=in.collect{arg item; FFT(LocalBuf(1024), item)};
+		var flat=numChannels.collect{arg i; FFTSpread.kr(chain[i])};
+		var unmaping=[lowSpread,highSpread,warp].asSpec.unmap(flat);
+		^unmaping.lag(lagTime);
+
+	}
+
 	dSlope {
 		arg timeWindow=5, lagTime=0.1;
 
-		var in=this.specify;
+		var in=this.audify;
 		var numChannels=in.size;
 		var sampNum=(timeWindow/ControlDur.ir).round;
 		var chain=in.collect{arg item; FFT(LocalBuf(1024), item)};
@@ -212,8 +287,8 @@
 
 		var writeBuf=numChannels.collect{arg i; BufWr.kr(slope[i], ringBuf[i], phasor)};
 
-		var min=numChannels.collect{arg i; (BufMin.kr(ringBuf[i])[0]-1e-5).clip(0,15000).lag};
-		var max=numChannels.collect{arg i; (BufMax.kr(ringBuf[i])[0]+1e-5).clip(0,15000).lag};
+		var min=numChannels.collect{arg i; (BufMin.kr(ringBuf[i])[0].clip(-1,1)-1e-5).lag};
+		var max=numChannels.collect{arg i; (BufMax.kr(ringBuf[i])[0].clip(-1,1)+1e-5).lag};
 
 		var unmapedSlope=numChannels.collect{arg i; [min[i], max[i]].asSpec.unmap(slope[i])};
 
@@ -221,10 +296,22 @@
 
 	}
 
+	sSlope {
+
+		arg lagTime=0.1, lowSlope= -1, highSlope=1, warp=\lin;
+		var in=this.audify;
+		var numChannels=in.size;
+		var chain=in.collect{arg item; FFT(LocalBuf(1024), item)};
+		var flat=numChannels.collect{arg i; FFTSlope.kr(chain[i])};
+		var unmaping=[lowSlope,highSlope,warp].asSpec.unmap(flat);
+		^unmaping.lag(lagTime);
+
+	}
+
 	dCrest {
 		arg timeWindow=5, lagTime=0.1;
 
-		var in=this.specify;
+		var in=this.audify;
 		var numChannels=in.size;
 		var sampNum=(timeWindow/ControlDur.ir).round;
 		var chain=in.collect{arg item; FFT(LocalBuf(1024), item)};
@@ -234,8 +321,8 @@
 
 		var writeBuf=numChannels.collect{arg i; BufWr.kr(crest[i], ringBuf[i], phasor)};
 
-		var min=numChannels.collect{arg i; (BufMin.kr(ringBuf[i])[0]-1e-5).clip(0,15000).lag};
-		var max=numChannels.collect{arg i; (BufMax.kr(ringBuf[i])[0]+1e-5).clip(0,15000).lag};
+		var min=numChannels.collect{arg i; (BufMin.kr(ringBuf[i])[0].clip(0,15000)-1e-5).lag};
+		var max=numChannels.collect{arg i; (BufMax.kr(ringBuf[i])[0].clip(0,15000)+1e-5).lag};
 
 		var unmapedCrest=numChannels.collect{arg i; [min[i], max[i]].asSpec.unmap(crest[i])};
 
@@ -243,9 +330,21 @@
 
 	}
 
+	sCrest {
+
+		arg lagTime=0.1, lowCrest=40, highCrest=20000, warp=\exp;
+		var in=this.audify;
+		var numChannels=in.size;
+		var chain=in.collect{arg item; FFT(LocalBuf(1024), item)};
+		var flat=numChannels.collect{arg i; FFTCrest.kr(chain[i])};
+		var unmaping=[lowCrest,highCrest,warp].asSpec.unmap(flat);
+		^unmaping.lag(lagTime);
+
+	}
+
 	dOnsets {
 
-		var in=this.specify;
+		var in=this.audify;
 		var numChannels=in.size;
 		var amps=numChannels.collect{arg i; Amplitude.kr(in[i])};
 		var chain=in.collect{arg item; FFT(LocalBuf(1024), item)};
@@ -256,7 +355,7 @@
 
 	dOnsetsJA {
 
-		var in=this.specify;
+		var in=this.audify;
 		var numChannels=in.size;
 		var amps=numChannels.collect{arg i; Amplitude.ar(in[i])};
 		var chain=in.collect{arg item; FFT(LocalBuf(2048), item)};
@@ -267,7 +366,7 @@
 
 	dOnsetsHF {
 
-		var in=this.specify;
+		var in=this.audify;
 		var numChannels=in.size;
 		var amps=numChannels.collect{arg i; Amplitude.ar(in[i])};
 		var chain=in.collect{arg item; FFT(LocalBuf(2048), item)};
