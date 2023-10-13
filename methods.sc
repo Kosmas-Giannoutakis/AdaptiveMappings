@@ -257,7 +257,7 @@
 		^[low, high, warp].asSpec.map(this.sPcile(lagTime, lowPcile, highPcile, warpPcile))
 	}
 
-	dCentroid {
+	dCent {
 		arg lagTime=0.1, timeWindow=5;
 
 		var in=this.audify;
@@ -279,12 +279,12 @@
 
 	}
 
-	mdCentroid {
+	mdCent {
 		arg low=0, high=1, warp=\lin, lagTime=0.1, timeWindow=5;
-		^[low, high, warp].asSpec.map(this.dCentroid(lagTime, timeWindow))
+		^[low, high, warp].asSpec.map(this.dCent(lagTime, timeWindow))
 	}
 
-	sCentroid {
+	sCent {
 
 		arg lagTime=0.1, lowCentroid=40, highCentroid=20000, warp=\exp;
 		var in=this.audify;
@@ -296,9 +296,9 @@
 
 	}
 
-	msCentroid {
+	msCent {
 		arg low=0, high=1, warp=\lin, lagTime=0.1, lowCentroid= -60, highCentroid=0, warpCentroid=\exp;
-		^[low, high, warp].asSpec.map(this.sCentroid(lagTime, lowCentroid, highCentroid, warpCentroid))
+		^[low, high, warp].asSpec.map(this.sCent(lagTime, lowCentroid, highCentroid, warpCentroid))
 	}
 
 	dSpread {
