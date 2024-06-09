@@ -4,48 +4,76 @@
 		^if(
 			this.isArray,
 			{
+				// If `this` is an array
 				if(this[0].isUGen,
-					{this},
-					{this.collect{arg i; i.ar}
-					}
+					{ this },  // If first element is a UGen, return the array as is
+					{ this.collect { |i| i.ar } }  // Otherwise, convert each element to audio-rate UGens
 				)
 			},
 			{
+				// If `this` is not an array
 				if(this.isUGen,
-					{[this]},
-					{if(this.ar.isArray,
-						{this.ar},
-						{[this.ar]})}
+					{ [this] },  // If `this` is already a UGen, wrap it in an array
+					{
+						// Otherwise, convert `this` to an audio-rate UGen
+						if(this.ar.isArray,
+							{ this.ar },  // If the result is an array, return it
+							{ [this.ar] }  // Otherwise, wrap the result in an array
+						)
+					}
 				)
 			}
 		);
-
 	}
+
 
 	dPitch {
-		arg lagTime=0.1, timeWindow=5;
+		arg lagTime = 0.1, timeWindow = 5;
 
-		var in=this.audify;
-		var numChannels=in.size;
-		var sampNum=(timeWindow/ControlDur.ir).round; //calculate number of sumples
-		var pitch=numChannels.collect{arg i; A2K.kr(ZeroCrossing.ar(in[i])).cpsmidi}; //track raw pitch, convert to midi
-		var ringBuf=numChannels.collect{LocalBuf(sampNum)}; // create buffers for each channel
-		var phasor=Phasor.kr(0,1,0,sampNum);
+		var in = this.audify;
+		var numChannels = in.size;
+		var sampNum = (timeWindow / ControlDur.ir).round;
+		var pitch, ringBuf, phasor, writeBuf, min, max, unmapedPitch;
 
-		//circularly write raw pitch in correspinding buffers
-		var writeBuf=numChannels.collect{arg i; BufWr.kr(pitch[i], ringBuf[i], phasor)};
+		// Ensure input is valid
+		if (in.isEmpty) { ^Signal(0)!numChannels };
 
-		// extract min values from the ring buffers, substract infinitesimal value for preventing nan in stable signals
-		var min=numChannels.collect{arg i; (BufMin.kr(ringBuf[i])[0].clip(0,127)-1e-5).lag};
-		// extract max values from the ring buffers, add infinitesimal value for preventing nan in stable signals
-		var max=numChannels.collect{arg i; (BufMax.kr(ringBuf[i])[0].clip(0,127)+1e-5).lag};
+		// Track raw pitch using ZeroCrossing
+		pitch = numChannels.collect { |i|
+			var p = A2K.kr(ZeroCrossing.ar(in[i])).cpsmidi;
+			Clip.kr(p,0,127);// Clip pitch values within the range 0-127
+		};
 
-		// unamp pitch to the range 0-1 for each channel
-		var unmapedPitch=numChannels.collect{arg i; [min[i], max[i]].asSpec.unmap(pitch[i])};
+		// Create buffers for each channel
+		ringBuf = numChannels.collect { LocalBuf(sampNum) };
+		// Phasor for circular buffer writing
+		phasor = Phasor.kr(0, 1, 0, sampNum);
 
+		// Write raw pitch values to corresponding buffers
+		writeBuf = numChannels.collect { |i|
+			BufWr.kr(pitch[i], ringBuf[i], phasor)
+		};
+
+		// Extract min values from the ring buffers with smaller infinitesimal adjustment
+		min = numChannels.collect { |i|
+			(BufMin.kr(ringBuf[i])[0].clip(0, 127) - 1e-10).lag(lagTime);
+		};
+
+		// Extract max values from the ring buffers with smaller infinitesimal adjustment
+		max = numChannels.collect { |i|
+			(BufMax.kr(ringBuf[i])[0].clip(0, 127) + 1e-10).lag(lagTime);
+		};
+
+		// Normalize pitch to the range 0-1 for each channel
+		unmapedPitch = numChannels.collect { |i|
+			[min[i], max[i]].asSpec.unmap(pitch[i])
+		};
+
+		// Return the normalized pitch values with applied lag
 		^unmapedPitch.lag(lagTime);
-
 	}
+
+
 
 	mdPitch {
 		arg low=0, high=1, warp=\lin, lagTime=0.1, timeWindow=5;
@@ -67,25 +95,50 @@
 	}
 
 	dAmp {
-		arg lagTime=0.1, timeWindow=5;
+		arg lagTime = 0.1, timeWindow = 5;
 
-		var in=this.audify;
-		var numChannels=in.size;
-		var sampNum=(timeWindow/ControlDur.ir).round;
-		var amps=numChannels.collect{arg i; Amplitude.kr(in[i]).ampdb};
-		var ringBuf=numChannels.collect{LocalBuf(sampNum)};
-		var phasor=Phasor.kr(0,1,0,sampNum);
+		var in = this.audify;
+		var numChannels = in.size;
+		var sampNum = (timeWindow / ControlDur.ir).round;
+		var amps, ringBuf, phasor, writeBuf, min, max, unmapedAmp;
 
-		var writeBuf=numChannels.collect{arg i; BufWr.kr(amps[i], ringBuf[i], phasor)};
+		// Ensure input is valid
+		if (in.isEmpty) { ^Signal(0)!numChannels };
 
-		var min=numChannels.collect{arg i; (BufMin.kr(ringBuf[i])[0].clip(-100,0)-1e-5).lag};
-		var max=numChannels.collect{arg i; (BufMax.kr(ringBuf[i])[0].clip(-100,0)+1e-5).lag};
+		// Track amplitude using Amplitude.kr
+		amps = numChannels.collect { |i|
+			Amplitude.kr(in[i]).ampdb.clip(-100, 0);  // Clip amplitude values within a reasonable range
+		};
 
-		var unmapedAmp=numChannels.collect{arg i; [min[i], max[i]].asSpec.unmap(amps[i])};
+		// Create buffers for each channel
+		ringBuf = numChannels.collect { LocalBuf(sampNum) };
+		// Phasor for circular buffer writing
+		phasor = Phasor.kr(0, 1, 0, sampNum);
 
+		// Write amplitude values to corresponding buffers
+		writeBuf = numChannels.collect { |i|
+			BufWr.kr(amps[i], ringBuf[i], phasor)
+		};
+
+		// Extract min values from the ring buffers with infinitesimal adjustment
+		min = numChannels.collect { |i|
+			(BufMin.kr(ringBuf[i])[0] - 1e-10).clip(-100, 0).lag(lagTime);
+		};
+
+		// Extract max values from the ring buffers with infinitesimal adjustment
+		max = numChannels.collect { |i|
+			(BufMax.kr(ringBuf[i])[0] + 1e-10).clip(-100, 0).lag(lagTime);
+		};
+
+		// Normalize amplitude to the range 0-1 for each channel
+		unmapedAmp = numChannels.collect { |i|
+			[min[i], max[i]].asSpec.unmap(amps[i])
+		};
+
+		// Return the normalized amplitude values with applied lag
 		^unmapedAmp.lag(lagTime);
-
 	}
+
 
 	mdAmp {
 		arg low=0, high=1, warp=\lin, lagTime=0.1, timeWindow=5;
@@ -107,25 +160,50 @@
 	}
 
 	dRms {
-		arg lagTime=0.1, timeWindow=5;
+		arg lagTime = 0.1, timeWindow = 5;
 
-		var in=this.audify;
-		var numChannels=in.size;
-		var sampNum=(timeWindow/ControlDur.ir).round;
-		var rms=numChannels.collect{arg i; (RunningSum.kr(in[i].squared)/40).sqrt.ampdb};
-		var ringBuf=numChannels.collect{LocalBuf(sampNum)};
-		var phasor=Phasor.kr(0,1,0,sampNum);
+		var in = this.audify;
+		var numChannels = in.size;
+		var sampNum = (timeWindow / ControlDur.ir).round;
+		var rms, ringBuf, phasor, writeBuf, min, max, unmapedRms;
 
-		var writeBuf=numChannels.collect{arg i; BufWr.kr(rms[i], ringBuf[i], phasor)};
+		// Ensure input is valid
+		if (in.isEmpty) { ^Signal(0)!numChannels };
 
-		var min=numChannels.collect{arg i; (BufMin.kr(ringBuf[i])[0].clip(-100,0)-1e-5).lag};
-		var max=numChannels.collect{arg i; (BufMax.kr(ringBuf[i])[0].clip(-100,0)+1e-5).lag};
+		// Track RMS amplitude using RunningSum.kr
+		rms = numChannels.collect { |i|
+			(RunningSum.kr(in[i].squared) / 40).sqrt.ampdb.clip(-100, 0);  // RMS calculation and clipping
+		};
 
-		var unmapedRms=numChannels.collect{arg i; [min[i], max[i]].asSpec.unmap(rms[i])};
+		// Create buffers for each channel
+		ringBuf = numChannels.collect { LocalBuf(sampNum) };
+		// Phasor for circular buffer writing
+		phasor = Phasor.kr(0, 1, 0, sampNum);
 
+		// Write RMS amplitude values to corresponding buffers
+		writeBuf = numChannels.collect { |i|
+			BufWr.kr(rms[i], ringBuf[i], phasor)
+		};
+
+		// Extract min values from the ring buffers with infinitesimal adjustment
+		min = numChannels.collect { |i|
+			(BufMin.kr(ringBuf[i])[0] - 1e-10).clip(-100, 0).lag(lagTime);
+		};
+
+		// Extract max values from the ring buffers with infinitesimal adjustment
+		max = numChannels.collect { |i|
+			(BufMax.kr(ringBuf[i])[0] + 1e-10).clip(-100, 0).lag(lagTime);
+		};
+
+		// Normalize RMS amplitude to the range 0-1 for each channel
+		unmapedRms = numChannels.collect { |i|
+			[min[i], max[i]].asSpec.unmap(rms[i])
+		};
+
+		// Return the normalized RMS amplitude values with applied lag
 		^unmapedRms.lag(lagTime);
-
 	}
+
 
 	mdRms {
 		arg low=0, high=1, warp=\lin, lagTime=0.1, timeWindow=5;
@@ -147,48 +225,122 @@
 	}
 
 	dLoud {
-		arg lagTime=0.1, timeWindow=5;
+		arg lagTime = 0.1, timeWindow = 5;
 
-		var in=this.audify;
-		var numChannels=in.size;
-		var sampNum=(timeWindow/ControlDur.ir).round;
-		var chain=in.collect{arg item; FFT(LocalBuf(1024), item)};
-		var loudness=numChannels.collect{arg i; Loudness.kr(chain[i])};
-		var ringBuf=numChannels.collect{LocalBuf(sampNum)};
-		var phasor=Phasor.kr(0,1,0,sampNum);
+		var in = this.audify;
+		var numChannels = in.size;
+		var sampNum = (timeWindow / ControlDur.ir).round;
+		var chain, loudness, ringBuf, phasor, writeBuf, min, max, unmapedLoudness;
 
-		var writeBuf=numChannels.collect{arg i; BufWr.kr(loudness[i], ringBuf[i], phasor)};
+		// Ensure input is valid
+		if (in.isEmpty) { ^Signal(0)!numChannels };
 
-		var min=numChannels.collect{arg i; (BufMin.kr(ringBuf[i])[0].clip(0,64)-1e-5).lag};
-		var max=numChannels.collect{arg i; (BufMax.kr(ringBuf[i])[0].clip(0,64)+1e-5).lag};
+		// Compute FFT chains for each channel
+		chain = in.collect { |item| FFT(LocalBuf(1024), item) };
 
-		var unmapedLoudness=numChannels.collect{arg i; [min[i], max[i]].asSpec.unmap(loudness[i])};
+		// Calculate loudness for each channel
+		loudness = numChannels.collect { |i|
+			Loudness.kr(chain[i]).clip(0, 64);  // Loudness calculation and clipping
+		};
 
+		// Create buffers for each channel
+		ringBuf = numChannels.collect { LocalBuf(sampNum) };
+		// Phasor for circular buffer writing
+		phasor = Phasor.kr(0, 1, 0, sampNum);
+
+		// Write loudness values to corresponding buffers
+		writeBuf = numChannels.collect { |i|
+			BufWr.kr(loudness[i], ringBuf[i], phasor)
+		};
+
+		// Extract min values from the ring buffers with infinitesimal adjustment
+		min = numChannels.collect { |i|
+			(BufMin.kr(ringBuf[i])[0] - 1e-10).clip(0, 64).lag(lagTime);
+		};
+
+		// Extract max values from the ring buffers with infinitesimal adjustment
+		max = numChannels.collect { |i|
+			(BufMax.kr(ringBuf[i])[0] + 1e-10).clip(0, 64).lag(lagTime);
+		};
+
+		// Normalize loudness to the range 0-1 for each channel
+		unmapedLoudness = numChannels.collect { |i|
+			[min[i], max[i]].asSpec.unmap(loudness[i])
+		};
+
+		// Return the normalized loudness values with applied lag
 		^unmapedLoudness.lag(lagTime);
-
 	}
+
+	mdLoud {
+		arg low=0, high=1, warp=\lin, lagTime=0.1, timeWindow=5;
+		^[low, high, warp].asSpec.map(this.dLoud(lagTime, timeWindow))
+	}
+
+	sLoud {
+		arg lagTime=0.1, lowLoud=0, highLoud=64, warp=\lin;
+		var in = this.audify;
+		var chain = in.collect { |item| FFT(LocalBuf(1024), item) };
+		var loudness = chain.collect { |c| Loudness.kr(c).clip(0, 64) };
+		var unmaping = [lowLoud, highLoud, warp].asSpec.unmap(loudness);
+		^unmaping.lag(lagTime);
+	}
+
+
+	msLoud {
+		arg low=0, high=1, warp=\lin, lagTime=0.1, lowLoud=0, highLoud=64, warpLoud=\lin;
+		^[low, high, warp].asSpec.map(this.sLoud(lagTime, lowLoud, highLoud, warpLoud))
+	}
+
 
 	dFlat {
-		arg lagTime=0.1, timeWindow=5;
+		arg lagTime = 0.1, timeWindow = 5;
 
-		var in=this.audify;
-		var numChannels=in.size;
-		var sampNum=(timeWindow/ControlDur.ir).round;
-		var chain=in.collect{arg item; FFT(LocalBuf(1024), item)};
-		var flat=numChannels.collect{arg i; SpecFlatness.kr(chain[i])};
-		var ringBuf=numChannels.collect{LocalBuf(sampNum)};
-		var phasor=Phasor.kr(0,1,0,sampNum);
+		var in = this.audify;
+		var numChannels = in.size;
+		var sampNum = (timeWindow / ControlDur.ir).round;
+		var chain, flat, ringBuf, phasor, writeBuf, min, max, unmapedFlatness;
 
-		var writeBuf=numChannels.collect{arg i; BufWr.kr(flat[i], ringBuf[i], phasor)};
+		// Ensure input is valid
+		if (in.isEmpty) { ^Signal(0)!numChannels };
 
-		var min=numChannels.collect{arg i; (BufMin.kr(ringBuf[i])[0].clip(0,0.8)-1e-5).lag};
-		var max=numChannels.collect{arg i; (BufMax.kr(ringBuf[i])[0].clip(0,0.8)+1e-5).lag};
+		// Compute FFT chains for each channel
+		chain = in.collect { |item| FFT(LocalBuf(1024), item) };
 
-		var unmapedFlatness=numChannels.collect{arg i; [min[i], max[i]].asSpec.unmap(flat[i])};
+		// Calculate spectral flatness for each channel
+		flat = numChannels.collect { |i|
+			SpecFlatness.kr(chain[i]).clip(0, 0.8);  // Spectral flatness calculation and clipping
+		};
 
+		// Create buffers for each channel
+		ringBuf = numChannels.collect { LocalBuf(sampNum) };
+		// Phasor for circular buffer writing
+		phasor = Phasor.kr(0, 1, 0, sampNum);
+
+		// Write spectral flatness values to corresponding buffers
+		writeBuf = numChannels.collect { |i|
+			BufWr.kr(flat[i], ringBuf[i], phasor)
+		};
+
+		// Extract min values from the ring buffers with infinitesimal adjustment
+		min = numChannels.collect { |i|
+			(BufMin.kr(ringBuf[i])[0] - 1e-10).clip(0, 0.8).lag(lagTime);
+		};
+
+		// Extract max values from the ring buffers with infinitesimal adjustment
+		max = numChannels.collect { |i|
+			(BufMax.kr(ringBuf[i])[0] + 1e-10).clip(0, 0.8).lag(lagTime);
+		};
+
+		// Normalize spectral flatness to the range 0-1 for each channel
+		unmapedFlatness = numChannels.collect { |i|
+			[min[i], max[i]].asSpec.unmap(flat[i])
+		};
+
+		// Return the normalized spectral flatness values with applied lag
 		^unmapedFlatness.lag(lagTime);
-
 	}
+
 
 	mdFlat {
 		arg low=0, high=1, warp=\lin, lagTime=0.1, timeWindow=5;
@@ -213,26 +365,54 @@
 	}
 
 	dPcile {
-		arg lagTime=0.1, timeWindow=5;
+		arg lagTime = 0.1, timeWindow = 5;
 
-		var in=this.audify;
-		var numChannels=in.size;
-		var sampNum=(timeWindow/ControlDur.ir).round;
-		var chain=in.collect{arg item; FFT(LocalBuf(1024), item)};
-		var pcile=numChannels.collect{arg i; SpecPcile.kr(chain[i])};
-		var ringBuf=numChannels.collect{LocalBuf(sampNum)};
-		var phasor=Phasor.kr(0,1,0,sampNum);
+		var in = this.audify;
+		var numChannels = in.size;
+		var sampNum = (timeWindow / ControlDur.ir).round;
+		var chain, pcile, ringBuf, phasor, writeBuf, min, max, unmapedPcile;
 
-		var writeBuf=numChannels.collect{arg i; BufWr.kr(pcile[i], ringBuf[i], phasor)};
+		// Ensure input is valid
+		if (in.isEmpty) { ^Signal(0)!numChannels };
 
-		var min=numChannels.collect{arg i; (BufMin.kr(ringBuf[i])[0].clip(0,15000)-1e-5).lag};
-		var max=numChannels.collect{arg i; (BufMax.kr(ringBuf[i])[0].clip(0,15000)+1e-5).lag};
+		// Compute FFT chains for each channel
+		chain = in.collect { |item| FFT(LocalBuf(1024), item) };
 
-		var unmapedPcile=numChannels.collect{arg i; [min[i], max[i]].asSpec.unmap(pcile[i])};
+		// Calculate spectral percentile for each channel
+		pcile = numChannels.collect { |i|
+			var p = SpecPcile.kr(chain[i]);  // Spectral percentile calculation and clipping
+			Clip.kr(p,0,20000);
+		};
 
+		// Create buffers for each channel
+		ringBuf = numChannels.collect { LocalBuf(sampNum) };
+		// Phasor for circular buffer writing
+		phasor = Phasor.kr(0, 1, 0, sampNum);
+
+		// Write spectral percentile values to corresponding buffers
+		writeBuf = numChannels.collect { |i|
+			BufWr.kr(pcile[i], ringBuf[i], phasor)
+		};
+
+		// Extract min values from the ring buffers with infinitesimal adjustment
+		min = numChannels.collect { |i|
+			(BufMin.kr(ringBuf[i])[0] - 1e-10).clip(0, 20000).lag(lagTime);
+		};
+
+		// Extract max values from the ring buffers with infinitesimal adjustment
+		max = numChannels.collect { |i|
+			(BufMax.kr(ringBuf[i])[0] + 1e-10).clip(0, 20000).lag(lagTime);
+		};
+
+		// Normalize spectral percentile to the range 0-1 for each channel
+		unmapedPcile = numChannels.collect { |i|
+			[min[i], max[i]].asSpec.unmap(pcile[i])
+		};
+
+		// Return the normalized spectral percentile values with applied lag
 		^unmapedPcile.lag(lagTime);
-
 	}
+
 
 	mdPcile {
 		arg low=0, high=1, warp=\lin, lagTime=0.1, timeWindow=5;
@@ -258,26 +438,55 @@
 	}
 
 	dCent {
-		arg lagTime=0.1, timeWindow=5;
+		arg lagTime = 0.1, timeWindow = 5;
 
-		var in=this.audify;
-		var numChannels=in.size;
-		var sampNum=(timeWindow/ControlDur.ir).round;
-		var chain=in.collect{arg item; FFT(LocalBuf(1024), item)};
-		var centroid=numChannels.collect{arg i; SpecCentroid.kr(chain[i])};
-		var ringBuf=numChannels.collect{LocalBuf(sampNum)};
-		var phasor=Phasor.kr(0,1,0,sampNum);
+		var in = this.audify;
+		var numChannels = in.size;
+		var sampNum = (timeWindow / ControlDur.ir).round;
+		var chain, centroid, ringBuf, phasor, writeBuf, min, max, unmapedCentroid;
 
-		var writeBuf=numChannels.collect{arg i; BufWr.kr(centroid[i], ringBuf[i], phasor)};
+		// Ensure input is valid
+		if (in.isEmpty) { ^Signal(0)!numChannels };
 
-		var min=numChannels.collect{arg i; (BufMin.kr(ringBuf[i])[0].clip(0,15000)-1e-5).lag};
-		var max=numChannels.collect{arg i; (BufMax.kr(ringBuf[i])[0].clip(0,15000)+1e-5).lag};
+		// Compute FFT chains for each channel
+		chain = in.collect { |item| FFT(LocalBuf(1024), item) };
 
-		var unmapedCentroid=numChannels.collect{arg i; [min[i], max[i]].asSpec.unmap(centroid[i])};
+		// Calculate spectral centroid for each channel
+		centroid = numChannels.collect { |i|
+			var c = SpecCentroid.kr(chain[i]).cpsmidi;  // Spectral centroid calculation and clipping
+			Clip.kr(c, 0, 127);
+		};
 
+		// Create buffers for each channel
+		ringBuf = numChannels.collect { LocalBuf(sampNum) };
+		// Phasor for circular buffer writing
+		phasor = Phasor.kr(0, 1, 0, sampNum);
+
+		// Write spectral centroid values to corresponding buffers
+		writeBuf = numChannels.collect { |i|
+			BufWr.kr(centroid[i], ringBuf[i], phasor)
+		};
+
+		// Extract min values from the ring buffers with infinitesimal adjustment
+		min = numChannels.collect { |i|
+			(BufMin.kr(ringBuf[i])[0] - 1e-10).clip(0, 127).lag(lagTime);
+		};
+
+		// Extract max values from the ring buffers with infinitesimal adjustment
+		max = numChannels.collect { |i|
+			(BufMax.kr(ringBuf[i])[0] + 1e-10).clip(0, 127).lag(lagTime);
+		};
+
+
+		// Normalize spectral centroid MIDI to the range 0-1 for each channel
+		unmapedCentroid = numChannels.collect { |i|
+			[min[i], max[i]].asSpec.unmap(centroid[i])
+		};
+
+		// Return the normalized spectral centroid MIDI values with applied lag
 		^unmapedCentroid.lag(lagTime);
-
 	}
+
 
 	mdCent {
 		arg low=0, high=1, warp=\lin, lagTime=0.1, timeWindow=5;
@@ -302,26 +511,57 @@
 	}
 
 	dSpread {
-		arg lagTime=0.1, timeWindow=5;
+		arg lagTime = 0.1, timeWindow = 5;
 
-		var in=this.audify;
-		var numChannels=in.size;
-		var sampNum=(timeWindow/ControlDur.ir).round;
-		var chain=in.collect{arg item; FFT(LocalBuf(1024), item)};
-		var spread=numChannels.collect{arg i; FFTSpread.kr(chain[i])};
-		var ringBuf=numChannels.collect{LocalBuf(sampNum)};
-		var phasor=Phasor.kr(0,1,0,sampNum);
+		var in = this.audify;
+		var numChannels = in.size;
+		var sampNum = (timeWindow / ControlDur.ir).round;
+		var chain, spread, centroids, ringBuf, phasor, writeBuf, min, max, unmapedSpread;
 
-		var writeBuf=numChannels.collect{arg i; BufWr.kr(spread[i], ringBuf[i], phasor)};
+		// Ensure input is valid
+		if (in.isEmpty) { ^Signal(0)!numChannels };
 
-		var min=numChannels.collect{arg i; (BufMin.kr(ringBuf[i])[0].clip(1e+4,7e+7)-1e-5).lag};
-		var max=numChannels.collect{arg i; (BufMax.kr(ringBuf[i])[0].clip(1e+4,7e+7)+1e-5).lag};
+		// Compute FFT chains for each channel
+		chain = in.collect { |item| FFT(LocalBuf(1024), item) };
 
-		var unmapedSpread=numChannels.collect{arg i; [min[i], max[i]].asSpec.unmap(spread[i])};
+		centroids = numChannels.collect { |i|
+			SpecCentroid.kr(chain[i]);
+		};
 
+		// Calculate spread for each channel
+		spread = numChannels.collect { |i|
+			FFTSpread.kr(chain[i], centroids[i]).clip(1e+4, 7e+7);  // Spread calculation and clipping
+		};
+
+		// Create buffers for each channel
+		ringBuf = numChannels.collect { LocalBuf(sampNum) };
+		// Phasor for circular buffer writing
+		phasor = Phasor.kr(0, 1, 0, sampNum);
+
+		// Write spread values to corresponding buffers
+		writeBuf = numChannels.collect { |i|
+			BufWr.kr(spread[i], ringBuf[i], phasor)
+		};
+
+		// Extract min values from the ring buffers with infinitesimal adjustment
+		min = numChannels.collect { |i|
+			(BufMin.kr(ringBuf[i])[0] - 1e-10).clip(1e+4, 7e+7).lag(lagTime);
+		};
+
+		// Extract max values from the ring buffers with infinitesimal adjustment
+		max = numChannels.collect { |i|
+			(BufMax.kr(ringBuf[i])[0] + 1e-10).clip(1e+4, 7e+7).lag(lagTime);
+		};
+
+		// Normalize spread values to the range 0-1 for each channel
+		unmapedSpread = numChannels.collect { |i|
+			[min[i], max[i]].asSpec.unmap(spread[i])
+		};
+
+		// Return the normalized spread values with applied lag
 		^unmapedSpread.lag(lagTime);
-
 	}
+
 
 	mdSpread {
 		arg low=0, high=1, warp=\lin, lagTime=0.1, timeWindow=5;
@@ -348,23 +588,40 @@
 	dSlope {
 		arg lagTime=0.1, timeWindow=5;
 
-		var in=this.audify;
-		var numChannels=in.size;
-		var sampNum=(timeWindow/ControlDur.ir).round;
-		var chain=in.collect{arg item; FFT(LocalBuf(1024), item)};
-		var slope=numChannels.collect{arg i; FFTSlope.kr(chain[i])};
-		var ringBuf=numChannels.collect{LocalBuf(sampNum)};
-		var phasor=Phasor.kr(0,1,0,sampNum);
+		var in = this.audify;
+		var numChannels = in.size;
+		var sampNum = (timeWindow / ControlDur.ir).round;
+		var chain, slope, ringBuf, phasor, writeBuf, min, max, unmapedSlope;
 
-		var writeBuf=numChannels.collect{arg i; BufWr.kr(slope[i], ringBuf[i], phasor)};
+		// Ensure input is valid
+		if (in.isEmpty) { ^Signal(0)!numChannels };
 
-		var min=numChannels.collect{arg i; (BufMin.kr(ringBuf[i])[0].clip(-1,1)-1e-5).lag};
-		var max=numChannels.collect{arg i; (BufMax.kr(ringBuf[i])[0].clip(-1,1)+1e-5).lag};
+		// Compute FFT chains for each channel
+		chain = in.collect { |item| FFT(LocalBuf(1024), item) };
 
-		var unmapedSlope=numChannels.collect{arg i; [min[i], max[i]].asSpec.unmap(slope[i])};
+		// Calculate spectral slope for each channel
+		slope = numChannels.collect { |i| FFTSlope.kr(chain[i]).clip(-1, 1); };
 
+		// Create buffers for each channel
+		ringBuf = numChannels.collect { LocalBuf(sampNum) };
+
+		// Phasor for circular buffer writing
+		phasor = Phasor.kr(0, 1, 0, sampNum);
+
+		// Write spectral slope values to corresponding buffers
+		writeBuf = numChannels.collect { |i| BufWr.kr(slope[i], ringBuf[i], phasor) };
+
+		// Extract min values from the ring buffers with infinitesimal adjustment
+		min = numChannels.collect { |i| (BufMin.kr(ringBuf[i])[0] - 1e-5).clip(-1, 1).lag(lagTime) };
+
+		// Extract max values from the ring buffers with infinitesimal adjustment
+		max = numChannels.collect { |i| (BufMax.kr(ringBuf[i])[0] + 1e-5).clip(-1, 1).lag(lagTime) };
+
+		// Normalize spectral slope to the range 0-1 for each channel
+		unmapedSlope = numChannels.collect { |i| [min[i], max[i]].asSpec.unmap(slope[i]) };
+
+		// Return the normalized spectral slope values with applied lag
 		^unmapedSlope.lag(lagTime);
-
 	}
 
 	mdSlope {
@@ -390,26 +647,55 @@
 	}
 
 	dCrest {
-		arg lagTime=0.1, timeWindow=5;
+		arg lagTime = 0.1, timeWindow = 5;
 
-		var in=this.audify;
-		var numChannels=in.size;
-		var sampNum=(timeWindow/ControlDur.ir).round;
-		var chain=in.collect{arg item; FFT(LocalBuf(1024), item)};
-		var crest=numChannels.collect{arg i; FFTCrest.kr(chain[i])};
-		var ringBuf=numChannels.collect{LocalBuf(sampNum)};
-		var phasor=Phasor.kr(0,1,0,sampNum);
+		var in = this.audify;
+		var numChannels = in.size;
+		var sampNum = (timeWindow / ControlDur.ir).round;
+		var chain, crest, ringBuf, phasor, writeBuf, min, max, unmapedCrest;
 
-		var writeBuf=numChannels.collect{arg i; BufWr.kr(crest[i], ringBuf[i], phasor)};
+		// Ensure input is valid
+		if (in.isEmpty) { ^Signal(0)!numChannels };
 
-		var min=numChannels.collect{arg i; (BufMin.kr(ringBuf[i])[0].clip(0,15000)-1e-5).lag};
-		var max=numChannels.collect{arg i; (BufMax.kr(ringBuf[i])[0].clip(0,15000)+1e-5).lag};
+		// Compute FFT chains for each channel
+		chain = in.collect { |item| FFT(LocalBuf(1024), item) };
 
-		var unmapedCrest=numChannels.collect{arg i; [min[i], max[i]].asSpec.unmap(crest[i])};
+		// Calculate spectral crest factor for each channel
+		crest = numChannels.collect { |i|
+			FFTCrest.kr(chain[i]).clip(0, 20000); // Clip to a reasonable range to avoid extreme values
 
+		};
+
+		// Create buffers for each channel
+		ringBuf = numChannels.collect { LocalBuf(sampNum) };
+
+		// Phasor for circular buffer writing
+		phasor = Phasor.kr(0, 1, 0, sampNum);
+
+		// Write spectral crest values to corresponding buffers
+		writeBuf = numChannels.collect { |i| BufWr.kr(crest[i], ringBuf[i], phasor) };
+
+		// Extract min values from the ring buffers with infinitesimal adjustment
+		min = numChannels.collect { |i|
+			var m = BufMin.kr(ringBuf[i])[0] - 1e-10;
+			m.clip(0,20000).lag(lagTime);
+		};
+
+		// Extract max values from the ring buffers with infinitesimal adjustment
+		max = numChannels.collect { |i|
+			var m = BufMax.kr(ringBuf[i])[0] + 1e-10; // Replace extreme values
+			m.clip(0,20000).lag(lagTime);
+		};
+
+		// Normalize spectral crest to the range 0-1 for each channel
+		unmapedCrest = numChannels.collect { |i|
+			[min[i], max[i]].asSpec.unmap(crest[i]);
+		};
+
+		// Return the normalized spectral crest values with applied lag
 		^unmapedCrest.lag(lagTime);
-
 	}
+
 
 	mdCrest {
 		arg low=0, high=1, warp=\lin, lagTime=0.1, timeWindow=5;
