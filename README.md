@@ -84,14 +84,14 @@ This is the central idea of the library.
 
 -   **`d...` methods (Dynamic)**:
     -   Analyzes the signal over a sliding `timeWindow` (default 5 seconds).
-    -   Finds the minimum and maximum values of the feature within that window.
-    -   Scales the current feature value to a `0..1` range based on that dynamic min/max.
-    -   **Use Case**: Expressive, adaptive control that "just works" regardless of the input signal's overall level. Perfect for modulating parameters based on performance dynamics.
-
+    -   Finds the minimum and maximum values of the feature that have occurred within that window.
+    -   Internally scales the current feature value to a normalized `0..1` range based on that dynamic min/max.
+    -   Maps this `0..1` value to your desired output range, specified by the `low` and `high` arguments.
+    
 -   **`s...` methods (Static)**:
-    -   Compares the signal against a fixed, user-defined range (e.g., `-60` to `0` dB for amplitude).
-    -   Scales the current feature value to a `0..1` range based on these absolute boundaries.
-    -   **Use Case**: Technical, precise control. Useful for creating triggers, gates, or effects that should only activate when a signal crosses a specific, predetermined threshold.
+    -   Compares the signal against a fixed, absolute input range that you define (e.g., `-60` to `0` dB for amplitude).
+    -   Internally scales the current feature value to a normalized `0..1` range based on these absolute boundaries.
+    -   Maps this `0..1` value to your desired output range, specified by the `low` and `high` arguments.
 
 ### Method Naming Convention
 
@@ -191,32 +191,25 @@ These are more CPU-intensive as they require an FFT calculation. They offer deep
 
 -   **`dLoud`/`sLoud`**: **A measure of perceived volume.**
     Unlike `dAmp` which just measures the raw signal peak, `dLoud` models the non-linear sensitivity of human hearing (as described by equal-loudness contours). It more accurately represents how "loud" a sound feels to a listener, giving more weight to midrange frequencies our ears are most sensitive to.
-    *   **Use Case**: The most "musical" way to control a parameter with volume. Use it to drive reverb mix, distortion amount, or any effect where you want the response to feel natural to the ear.
 
 -   **`dCent`/`sCent`**: **A measure of perceptual brightness.**
     The Spectral Centroid is the "center of mass" of the spectrum. A high centroid value means the sound's energy is concentrated in higher frequencies, making it sound bright, sharp, or "metallic." A low value means the energy is in the lower frequencies, making it sound dark, dull, or muffled.
-    *   **Use Case**: Map the centroid to a low-pass filter's cutoff frequency. As the input sound gets brighter, the filter on another sound opens up automatically.
-
+   
 -   **`dFlat`/`sFlat`**: **A measure of noisiness vs. tonality.**
     This feature describes how "flat" or "peaked" the spectrum is. A high flatness value (near 1.0) indicates the sound is noise-like, with energy spread evenly across the spectrum (like wind or static). A low value (near 0.0) indicates the sound is tonal, with energy concentrated in a few specific peaks (like a sine wave or a clear vocal note).
-    *   **Use Case**: Crossfade between a granular, noisy texture and a pure synthesizer tone. As the input becomes more tonal, the synth fades in.
-
+   
 -   **`dSpread`/`sSpread`**: **A measure of spectral richness or complexity.**
     Related to the centroid, this describes how "spread out" the spectrum is. A sound with a low spread is "thin" and focused, with its frequencies clustered tightly around its center. A sound with a high spread is "rich" and "full-bodied," with significant energy far from its center. A complex chord, for instance, has a high spread.
-    *   **Use Case**: Control the number of voices or the detuning amount in a unison synth patch. As the input sound becomes richer, the synth patch also becomes fatter and more complex.
-
+   
 -   **`dCrest`/`sCrest`**: **A measure of a spectrum's "peakiness."**
     Similar to flatness, this is another way to gauge tonality. It measures the ratio of the loudest frequency component to the overall average. A high crest factor indicates that one or a few frequencies are dramatically more prominent than the rest, which is characteristic of a strong, clear tone emerging from a quieter or noisier background.
-    *   **Use Case**: An excellent trigger for melodic or harmonic-locking effects. Use a high crest value to activate a pitch shifter that locks onto the most prominent note in the sound.
-
+    
 -   **`dSlope`/`sSlope`**: **A measure of the spectrum's overall "tilt."**
     This describes whether a sound has more energy in the low or high frequencies. A negative slope means the sound is "dark" or bass-heavy, with energy decreasing as frequency increases (common in natural sounds). A positive slope means the sound is "bright" or treble-heavy. It's like a simple, one-number summary of the sound's EQ curve.
-    *   **Use Case**: Use it as an "anti-EQ." If the input sound gets too dark (negative slope), use the signal to boost the high frequencies on a master filter to compensate.
-
+    
 -   **`dPcile`/`sPcile`**: **A robust measure of brightness via energy distribution.**
     Spectral Percentile answers the question: "Below which frequency does 95% of the sound's energy lie?" It's a powerful alternative to the centroid for measuring brightness, as it's less affected by a few extreme high-frequency outliers. It gives a solid indication of where the main "body" of the sound's power is located.
-    *   **Use Case**: Control a high-pass filter. Set the filter's cutoff to follow the percentile, effectively cutting out only the lowest rumbles while preserving the main character of the sound.
-
+    
 ### Onset Detectors
 
 These return a trigger signal (`> 0`) when an attack is detected.
