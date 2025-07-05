@@ -240,7 +240,7 @@ All `d...` and `s...` methods share these final mapping arguments:
 
 -   `low` (float): The minimum output value. Defaults to `0`.
 -   `high` (float): The maximum output value. Defaults to `1`.
--   `warp` (symbol): The mapping curve. Can be `\lin`, `\exp`, `\log`, etc. Defaults to `\lin`.
+-   `warp` (symbol): The mapping curve. Can be `\lin` or `\exp`.
 -   `lagTime` (float): The time in seconds to smooth the output signal. Defaults to `0.1`.
 
 ### Time-Domain Features
