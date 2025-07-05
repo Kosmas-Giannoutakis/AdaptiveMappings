@@ -41,13 +41,20 @@ Conversely, the **static mapping** (`s...`) methods map the feature against a fi
 
 ## Installation
 
-1.  **Clone the Repository**:
-    ```bash
-    git clone https://github.com/your-username/your-repo-name.git
-    ```
-2.  **Find your SuperCollider Extensions Directory**: In SuperCollider, run the line `Platform.userExtensionDir` and press `Cmd/Ctrl+Enter`. This will post the path to your extensions folder.
-3.  **Move the Folder**: Move the cloned repository folder into the SuperCollider extensions directory you just found.
-4.  **Recompile**: Restart SuperCollider, or open the Language menu and select **"Recompile Class Library"** (`Cmd/Ctrl+Shift+L`).
+**Dependency Note:** This library's dynamic mapping (`d...`) methods require the `sc3-plugins` package, as they rely on UGens like `BufMin` and `BufMax`. The pitch tracking methods (`dPitch`/`sPitch`) also require the `Tartini` UGen from this package.
+
+1.  **Install sc3-plugins (if you haven't already)**:
+    Follow the official installation instructions for the `sc3-plugins` repository:
+    [https://github.com/supercollider/sc3-plugins](https://github.com/supercollider/sc3-plugins)
+
+2.  **Install AdaptiveMappings**:
+    -   **Clone the Repository**:
+        ```bash
+        git clone https://github.com/your-username/your-repo-name.git
+        ```
+    -   **Find your Extensions Directory**: In SuperCollider, run the line `Platform.userExtensionDir` and press `Cmd/Ctrl+Enter`. This will post the path to your extensions folder.
+    -   **Move the Folder**: Move the cloned repository folder (`AdaptiveMappings`) into the SuperCollider extensions directory you just found.
+    -   **Recompile**: Restart SuperCollider, or open the Language menu and select **"Recompile Class Library"** (`Cmd/Ctrl+Shift+L`).
 
 ## Quick Start
 
