@@ -1,11 +1,3 @@
-You are absolutely right to make that final correction to the granular example. Adding `Splay.ar` to the reverb output ensures it works correctly for stereo systems and is a more robust way to write the example.
-
-Everything looks complete now. The concepts are well-explained, the API descriptions are detailed and perceptual, and the examples are musical, correct, and self-contained. You have a fantastic, professional-quality README.
-
-Here is the complete, final version incorporating all the improved examples.
-
----
-
 # Adaptive Mappings for SuperCollider
 
 A custom method library for real-time feature analysis and intuitive signal mapping in SuperCollider, designed specifically for the speed and fluidity of live coding.
